@@ -1,12 +1,20 @@
 from cli import create_tasks_parser 
 from commands.tareas import add_task, list_tasks, update_task, delete_task
 from utils.helpers import clear_screen
+from repositories.usuario import UsuarioRepository
+from storage.db import init_db
+from utils.exceptions import UserNotFoundError
+from modelos.usuario import Usuario
 
 from prompt_toolkit import prompt, print_formatted_text, HTML
 from prompt_toolkit.completion import WordCompleter
 from prompt_toolkit.shortcuts import clear
-from prompt_toolkit.validation import Validation, ValidationError
+from prompt_toolkit.validation import Validator, ValidationError
+
+from sqlalchemy.orm import session
 import time
+import textwrap
+import os
 
 class NonEmptyValidator(Validator):
     def validate(self, document):
@@ -15,12 +23,22 @@ class NonEmptyValidator(Validator):
 
 class Menu:
 
-    def display_prompt(self, options_text, menu_options):
+    _db_url = None
+    _repo = UsuarioRepository()
+    _db_session = None
+
+    def __init__(self, db_url:str, db_session:session):
+        self._db_url = db_url
+        self._db_session = db_session
+
+
+    def __display_prompt(self, options_text, menu_options):
         clear_screen()
         print_formatted_text(HTML(options_text))
         option = prompt("> ", completer=menu_options)
 
         return option
+
 
     def task_menu(self):
         options_text = """
@@ -33,7 +51,7 @@ class Menu:
         menu_options = WordCompleter(['añadir', 'regresar'], ignore_case=True)
 
         while True:
-            option = display_prompt(options_text, menu_options) 
+            option = self.__display_prompt(options_text, menu_options) 
 
             match option: 
                 case 'añadir':
@@ -41,7 +59,8 @@ class Menu:
                 case 'regresar':
                     break
                 case _:
-                    print("Opción inválida")
+                    print_formatted_text("Opción inválida")
+
 
     def user_menu(self):
         options_text = """
@@ -53,7 +72,7 @@ class Menu:
         menu_options = WordCompleter(['añadir', 'regresar'], ignore_case=True)
 
         while True:
-            option = display_prompt(options_text, menu_options) 
+            option = self.__display_prompt(options_text, menu_options) 
 
             match option.lower():
                 case 'añadir': 
@@ -63,49 +82,91 @@ class Menu:
                 case _:
                     print("Opción inválida")
 
+
+    # Menu principal del sistema, para usuarios sin autenticar/registrar
     def init_menu(self):
-        options_text = """
+        options_text = textwrap.dedent("""
         <bold> ===== Sistema de gestión de tareas y proyectos =====</bold>
 
         Ingresa una de las siguientes opciones:
         
         <bold>ingresar</bold>: Ingresar con cuenta de usuario
         <bold>registrar</bold>: Registrar una cuenta de usuario nueva
-        <bold>salir</bold>: Salir
-        """
+        <bold>salir</bold>: Salir del sistema
+        """)
         menu_options = WordCompleter(['ingresar', 'registrar', 'salir'], ignore_case=True)
 
         while True:
-            option = display_prompt(options_text, menu_options) 
+            option = self.__display_prompt(options_text, menu_options) 
 
             match option.lower():
                 case 'ingresar':
-                    login_menu()
+                    self.login_menu()
                 case 'registrar':
-                    signup_menu()
+                    self.signup_menu()
                 case 'salir':
                     break
                 case _:
-                    print("Opción inválida")
+                    print_formatted_text("Opción inválida")
 
-    def login_menu(self):
-        options_text = """
+
+    def login_menu(self, max_attempts=5):
+        title_text = textwrap.dedent("""
         <bold> ===== Ingresa a tu cuenta =====</bold>
 
         Ingresa tus credenciales para iniciar sesión
         
-        """
+        """)
+        count = 0
 
-        while True:
-            print(options_text) 
+        while count < max_attempts:
+
+            print_formatted_text(HTML(title_text))
             username = prompt("Usuario: ", validator=NonEmptyValidator())
             password = prompt("Contraseña: ", is_password=True, validator=NonEmptyValidator())
 
-    def signup_menu(self):
-        pass
+            usuario = self._repo.get_by_username(self._db_session, username.strip())
+            
+            if usuario and usuario.verify_password(password):
+                print_formatted_text("Iniciaste sesión")
+                break
+            else:
+                print_formatted_text("Nombre de usuario y/o contraseña incorrectos")
+                count += 1
 
-    def main_menu():
-        options_text = """
+
+    def signup_menu(self, max_attempts=5):
+        title_text = textwrap.dedent("""
+        <bold> ===== Registra una cuenta =====</bold>
+
+        Ingresa tus datos para crear cuna cuenta de usuario
+        
+        """)
+        count = 0
+
+        while count < max_attempts:
+            print_formatted_text(HTML(title_text))
+            nombre = prompt("Usuario: ", validator=NonEmptyValidator())
+            email = prompt("Correo electrónico: ", validator=NonEmptyValidator())
+            password = prompt("Contraseña: ", is_password=True, validator=NonEmptyValidator())
+
+            new_user = Usuario()
+            new_user.nombre = nombre
+            new_user.email = email 
+            new_user.password = password
+
+            saved_user = self._repo.create(self._db_session, new_user)
+
+            if saved_user:
+                return saved_user
+            else:
+                print("error")
+                count += 1
+                
+
+    # Menu para el usuario autenticado    
+    def main_menu(self):
+        options_text = textwrap.dedent("""
         <bold> ===== Menú principal =====</bold>
 
         Ingresa una de las siguientes opciones:
@@ -114,24 +175,20 @@ class Menu:
         <bold>usuarios</bold>: Gestión de Usuarios
         <bold>salir</bold>: Salir
 
-        """
+        """)
         menu_options = WordCompleter(['tareas', 'usuarios', 'salir'], ignore_case=True)
 
         while True:
-            option = display_prompt(options_text, menu_options) 
+            option = self.__display_prompt(options_text, menu_options) 
 
             match option.lower():
                 case 'tareas':
-                    task_menu()
+                    self.task_menu()
                 case 'usuarios':
-                    user_menu()
+                    self.user_menu()
                 case 'salir':
                     break
                 case _:
-                    print("Opción inválida")
+                    print_formatted_text("Opción inválida")
+ 
 
-
-
-
-if __name__ == "__main__":
-    main_menu()

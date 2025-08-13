@@ -1,48 +1,49 @@
 from sqlalchemy.exc import IntegrityError
-
 from sqlalchemy.orm import session
+
 from modelos.usuario import Usuario
 from utils.exceptions import UserNotFoundError, UserAlreadyExistsError
 
 
 class UsuarioRepository():
 
-    def create(self, db:session, user: Usuario) -> Usuario :
+    def create(self, db_session:session, user: Usuario) -> Usuario :
         try:
-            db.add(user)
-            db.commit()
-            db.refresh(user)
+            db_session.add(user)
+            db_session.commit()
+            db_session.refresh(user)
             return user
         except IntegrityError as e:
-            db.rollback()
+            db_session.rollback()
             raise UserAlreadyExistsError("Ya existe una cuenta con ese correo") from e
 
-    def get_by_username(self, db:session, username: str)->Usuario:
-        usuario = db.query(Usuario).filter(Usuario.nombre == username).first()
+    def get_by_username(self, db_session:session, username: str)->Usuario:
+        print("EL USER ES", username)
+        usuario = db_session.query(Usuario).filter(Usuario.nombre == username).first()
 
         if usuario is None:
             raise UserNotFoundError("No existe un usuario con ese nombre")
         else:
             return usuario
 
-    def get_by_email(self, db:session, email: str)->Usuario:
-        usuario = db.query(Usuario).filter(Usuario.email == email).first()
+    def get_by_email(self, db_session:session, email: str)->Usuario:
+        usuario = db_session.query(Usuario).filter(Usuario.email == email).first()
         
         if usuario is None:
             raise UserNotFoundError("No existe un usuario con ese correo")
         else:
             return usuario
     
-    def get_all(self, db:session)->[Usuario]:
-        usuario_list = db.query(Usuario)
+    def get_all(self, db_session:session)->[Usuario]:
+        usuario_list = db_session.query(Usuario)
 
         if usuario_list is None:
             raise UserNotFoundError("No hay usuarios registrados")
         else:
             return usuario_list
 
-    def update(self, db:session, usuario: Usuario)->Usuario:
-        updated_usuario = self.get_by_email(db, usuario.email)
+    def update(self, db_session:session, usuario: Usuario)->Usuario:
+        updated_usuario = self.get_by_email(db_session, usuario.email)
 
         if updated_usuario is None:
             raise UserNotFoundError("No existe el usuario")
@@ -51,23 +52,23 @@ class UsuarioRepository():
                 updated_usuario.nombre = usuario.nombre 
                 updated_usuario.email = usuario.email 
                 updated_usuario.password = usuario.password
-                db.commit()
+                db_session.commit()
 
                 return updated_usuario
             except IntegrityError:
-                db.rollback()
+                db_session.rollback()
                 raise
     
-    def delete_by_id(self, db:session, usuario_id: int) -> bool:
-        usuario = db.query(Usuario).filter(Usuario.id == usuario_id).first()
+    def delete_by_id(self, db_session:session, usuario_id: int) -> bool:
+        usuario = db_session.query(Usuario).filter(Usuario.id == usuario_id).first()
 
         if usuario is None:
             raise UserNotFoundError("No existe un usuario con ese ID")
         try:
-            db.delete(usuario)
-            db.commit()
+            db_session.delete(usuario)
+            db_session.commit()
             return True 
         except Except as e:
-            db.rollback()
+            db_session.rollback()
             return False
 

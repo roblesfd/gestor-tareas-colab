@@ -3,8 +3,6 @@ from sqlalchemy.orm import declarative_base
 import bcrypt
 
 Base = declarative_base()
-engine = create_engine("sqlite:///./storage/example.db")  
-
 
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -18,6 +16,5 @@ class Usuario(Base):
         self.password = hashed.decode('utf-8')
 
     def verify_password(self, plain_pwd:str) -> bool:
-        return bcrypt.checkpw(plain_pwd.encode('utf-8'). self.password.encode('utf-8'))
+        return bcrypt.checkpw(plain_pwd, self.password.encode)
 
-# Base.metadata.create_all(engine)
