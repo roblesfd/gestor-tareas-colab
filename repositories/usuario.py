@@ -1,7 +1,7 @@
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import session
 
-from modelos.usuario import Usuario
+from models.usuario import Usuario
 from utils.exceptions import UserNotFoundError, UserAlreadyExistsError
 
 
@@ -18,7 +18,6 @@ class UsuarioRepository():
             raise UserAlreadyExistsError("Ya existe una cuenta con ese correo") from e
 
     def get_by_username(self, db_session:session, username: str)->Usuario:
-        print("EL USER ES", username)
         usuario = db_session.query(Usuario).filter(Usuario.nombre == username).first()
 
         if usuario is None:

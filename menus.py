@@ -1,10 +1,9 @@
-from cli import create_tasks_parser 
-from commands.tareas import add_task, list_tasks, update_task, delete_task
 from utils.helpers import clear_screen
 from repositories.usuario import UsuarioRepository
 from storage.db import init_db
 from utils.exceptions import UserNotFoundError
-from modelos.usuario import Usuario
+from models.usuario import Usuario
+from services.usuario import UsuarioService
 
 from prompt_toolkit import prompt, print_formatted_text, HTML
 from prompt_toolkit.completion import WordCompleter
@@ -26,10 +25,12 @@ class Menu:
     _db_url = None
     _repo = UsuarioRepository()
     _db_session = None
+    _user_service = None
 
     def __init__(self, db_url:str, db_session:session):
         self._db_url = db_url
         self._db_session = db_session
+        self._user_service = UsuarioService(self._repo, self._db_session)
 
 
     def __display_prompt(self, options_text, menu_options):
@@ -60,6 +61,27 @@ class Menu:
                     break
                 case _:
                     print_formatted_text("Opción inválida")
+
+    def addtask_menu(self):
+        title_text = """
+        <bold>===== Añadir una tareas =====</bold>
+        """
+        menu_options = WordCompleter(['añadir', 'regresar'], ignore_case=True)
+
+        while True:
+            print_formatted_text(HTML(title_text))
+            titulo = prompt("Titulo: ", validator=NonEmptyValidator())
+            descripcion = prompt("Descripción: ", is_password=True, validator=NonEmptyValidator())
+            fecha_vencimiento = prompt("Fecha de vencimiento (dia-mes-año:horas-minutos): ", is_password=True, validator=NonEmptyValidator())
+
+            # match option: 
+            #     case 'añadir':
+            #         print(f"Añadiste una tarea")
+            #     case 'regresar':
+            #         break
+            #     case _:
+            #         print_formatted_text("Opción inválida")
+
 
 
     def user_menu(self):
@@ -125,10 +147,11 @@ class Menu:
             username = prompt("Usuario: ", validator=NonEmptyValidator())
             password = prompt("Contraseña: ", is_password=True, validator=NonEmptyValidator())
 
-            usuario = self._repo.get_by_username(self._db_session, username.strip())
+            usuario = self._user_service.authenticate(username, password)
             
-            if usuario and usuario.verify_password(password):
+            if usuario:
                 print_formatted_text("Iniciaste sesión")
+                self.main_menu()
                 break
             else:
                 print_formatted_text("Nombre de usuario y/o contraseña incorrectos")
@@ -139,7 +162,7 @@ class Menu:
         title_text = textwrap.dedent("""
         <bold> ===== Registra una cuenta =====</bold>
 
-        Ingresa tus datos para crear cuna cuenta de usuario
+        Ingresa tus datos para crear una cuenta de usuario
         
         """)
         count = 0
@@ -150,19 +173,14 @@ class Menu:
             email = prompt("Correo electrónico: ", validator=NonEmptyValidator())
             password = prompt("Contraseña: ", is_password=True, validator=NonEmptyValidator())
 
-            new_user = Usuario()
-            new_user.nombre = nombre
-            new_user.email = email 
-            new_user.password = password
-
-            saved_user = self._repo.create(self._db_session, new_user)
+            saved_user = self._user_service.signup(self, nombre, email, password)
 
             if saved_user:
                 return saved_user
             else:
                 print("error")
                 count += 1
-                
+
 
     # Menu para el usuario autenticado    
     def main_menu(self):

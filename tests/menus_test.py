@@ -1,11 +1,10 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
-from examples.misc import saludar
 from utils.exceptions import UserNotFoundError
 from menus import Menu, NonEmptyValidator
 from config import init_config
-from modelos.usuario import Usuario
+from models.usuario import Usuario
 
 
 repo = None 
@@ -50,26 +49,34 @@ def test_login_menu_success(mock_print, mock_prompt, setup_env):
     menu = setup_env
 
     fake_user = MagicMock()
+    fake_user.nombre = "usuario1"
+    fake_user.password = "clave123"
     fake_user.verify_password.return_value = True
 
-    menu._repo = MagicMock()
-    menu._repo.get_by_username.return_value = fake_user
+    menu._user_service = MagicMock()
+    menu._user_service.authenticate.return_value = fake_user
 
-    menu.login_menu()
-    menu._repo.get_by_username.assert_called_once_with(menu._db_session, "usuario1")
+    menu.main_menu = MagicMock()
+
+    menu.login_menu(max_attempts=1)
+    success_msg = "Iniciaste sesión"
+    success_calls = [call for call in mock_print.call_args_list if success_msg in str(call)]
+    assert len(success_calls) == 1
+
+    menu.main_menu.assert_called_once()
 
 
-# Test login_menu con usuario no encontrado
+# Test login_menu con usuario no encontrado 
 @patch("menus.prompt", side_effect=["usuario_invalido", "clave_invalida"])
 @patch("menus.print_formatted_text")
 def test_login_menu_invalid_credentials(mock_print, mock_prompt, setup_env):
     menu = setup_env
 
     fake_user = MagicMock()
-    fake_user.verify_password.return_value = False
 
-    menu._repo = MagicMock()
-    menu._repo.get_by_username.return_value = fake_user
+    menu._user_service = MagicMock()
+    menu._user_service.user.verify_password.return_value = False
+    menu._user_service.authenticate.return_value = None
 
     menu.login_menu(max_attempts=1)
 
@@ -80,20 +87,21 @@ def test_login_menu_invalid_credentials(mock_print, mock_prompt, setup_env):
 # Test signup_menu con registro exitoso y retorna usuario
 @patch("menus.prompt", side_effect=["mock_user", "mock@example.com", "mockpass"])
 @patch("menus.print_formatted_text")
-def test_signup_menu_successful(mock_print, mock_prompt, setup_env):
-
+def test_signup_menu_success(mock_print, mock_prompt, setup_env):
     menu = setup_env
 
     fake_user = Usuario(nombre="mock_user", email="mock@example.com", password="mockpass")    
     
-    repo = MagicMock()
-    repo.create.return_value = fake_user
+    user_service_mock  = MagicMock()
+    user_service_mock.signup.return_value = fake_user
 
-    menu._repo = repo
-    result = menu.signup_menu()
+    menu._user_service = user_service_mock
+
+    result = menu.signup_menu()  
 
     assert result.nombre == fake_user.nombre 
     assert result.email == fake_user.email
+    user_service_mock.signup.assert_called_once()
 
 # Test que verifica si se llamo task_menu si la opcion ingresada es "tareas"
 @patch("menus.Menu.task_menu", autospec=True)
@@ -116,7 +124,6 @@ def test_main_menu_calls_user_menu(mock_prompt, mock_user_menu, setup_env):
 @patch("menus.Menu.login_menu")
 @patch("menus.Menu._Menu__display_prompt", side_effect=["ingresar", "salir"])
 def test_init_menu_calls_login_menu(mock_prompt, mock_login_menu, setup_env):
-
     menu = setup_env 
 
     menu.init_menu()
